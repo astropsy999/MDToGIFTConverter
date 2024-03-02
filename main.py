@@ -1,17 +1,16 @@
+import html
 import os
 import re
-import html
+import sys
 from typing import Union, List, Optional
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QMessageBox
 from google.cloud import translate_v2 as translate
 from google.oauth2 import service_account
 
 credentials = service_account.Credentials.from_service_account_file(
     'handy-station-415405-198eaa66d90a.json')
-
-# scoped_credentials = credentials.with_scopes(
-#     ['https://www.googleapis.com/auth/cloud-platform'])
-
 
 TO_TRANSLATE = False
 # TO_TRANSLATE = 'uk'
@@ -77,14 +76,25 @@ def convert_to_gift(question_text: str) -> Optional[str]:
     return f"{gift_question}{gift_options.strip().replace('{', '&#123;').replace('}', '&#125;')}" + "}"
 
 
-def main() -> None:
-    # Get current folder
+def list_md_files() -> List[str]:
+    """Get list of .md files in the current directory."""
     current_directory: str = os.getcwd()
-
-    # Get list of .md files
     md_files: List[str] = [f for f in os.listdir(current_directory) if f.endswith('.md') and f != 'README.md']
+    return md_files
 
-    # Converting each MD to GIFT
+
+def show_markdown_files_dialog(md_files: List[str]) -> None:
+    message = "Markdown files found in the current directory:\n"
+    for idx, md_file in enumerate(md_files, start=1):
+        message += f"{idx}. {md_file}\n"
+
+    message_box = QMessageBox()
+    message_box.setText(message)
+    message_box.setWindowTitle("Markdown Files")
+    message_box.exec()
+
+
+def convert_files_to_gift(md_files: List[str], current_directory: str) -> None:
     for md_file in md_files:
         with open(os.path.join(current_directory, md_file), 'r', encoding='utf-8') as f:
             markdown_text: str = f.read()
@@ -104,7 +114,6 @@ def main() -> None:
             if TO_TRANSLATE:
                 translated_question: str = translate_text(question)
                 translated_question = translated_question['translatedText']
-                print('TRANSLATE:', translated_question)
                 gift_question: str = convert_to_gift(translated_question)
             else:
                 gift_question: str = convert_to_gift(question)
@@ -115,9 +124,33 @@ def main() -> None:
         if gift_questions:
             with open(os.path.join(current_directory, gift_file), 'w', encoding='utf-8') as f:
                 for gift_question in gift_questions:
-                    print('RECORD:', gift_question)
                     f.write(gift_question)
                     f.write('\n\n')
+
+
+def main() -> None:
+    app = QApplication(sys.argv)
+
+    current_directory: str = os.getcwd()
+    md_files: List[str] = list_md_files()
+
+    if not md_files:
+        QMessageBox.information(None, "Information", "No Markdown files found in the current directory.")
+        return
+
+    show_markdown_files_dialog(md_files)
+
+    reply = QMessageBox.question(None, "Confirmation", "Convert all files to GIFT format?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+    if reply == QMessageBox.StandardButton.Yes:
+        convert_files_to_gift(md_files, current_directory)
+        QMessageBox.information(None, "Information", "Conversion completed.")
+    elif reply == QMessageBox.StandardButton.No:
+        QMessageBox.information(None, "Information", "Conversion aborted.")
+    else:
+        QMessageBox.warning(None, "Warning", "Invalid input. Please enter 'yes' or 'no'.")
+
+    sys.exit(app.exec())
 
 
 if __name__ == '__main__':
